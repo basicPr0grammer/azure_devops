@@ -352,16 +352,16 @@ def main():
         
         elif state == 'present':
             if existing_pool:
-                # Update existing pool
-                if pool_id:
-                    pool, changed = update_agent_pool(module, agent_client, pool_id, existing_pool)
-                    result['changed'] = changed
-                    if pool:
-                        result['pool'] = pool_to_dict(pool)
-                        if list_agents:
-                            result['agents'] = get_pool_agents(agent_client, pool.id)
+                # Update existing pool (use the existing pool's ID if pool_id not provided)
+                effective_pool_id = pool_id if pool_id else existing_pool.id
+                pool, changed = update_agent_pool(module, agent_client, effective_pool_id, existing_pool)
+                result['changed'] = changed
+                if pool:
+                    result['pool'] = pool_to_dict(pool)
+                    if list_agents:
+                        result['agents'] = get_pool_agents(agent_client, pool.id)
                 else:
-                    # Pool exists, no update needed if only name provided
+                    # In check mode or no changes, still return the pool
                     result['pool'] = pool_to_dict(existing_pool)
                     if list_agents:
                         result['agents'] = get_pool_agents(agent_client, existing_pool.id)
