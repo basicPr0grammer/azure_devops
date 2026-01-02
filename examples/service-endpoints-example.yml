@@ -1,0 +1,180 @@
+---
+# Example playbook for using the azure_devops_service_endpoint module
+
+- name: Manage Azure DevOps Service Endpoints
+  hosts: localhost
+  gather_facts: false
+  collections:
+    - basicPr0grammer.azure_devops
+  
+  vars:
+    ado_org: "{{ lookup('env', 'ADO_ORGANIZATION') }}"
+    ado_project: "{{ lookup('env', 'ADO_PROJECT') }}"
+    ado_pat: "{{ lookup('env', 'AZURE_DEVOPS_PAT') }}"
+  
+  tasks:
+    # Example 1: Generic API Endpoint
+    - name: Create generic API service endpoint
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "external-api"
+        description: "Connection to external REST API"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "{{ api_username }}"
+            password: "{{ api_password }}"
+        state: present
+      register: api_endpoint
+    
+    - name: Display API endpoint
+      debug:
+        var: api_endpoint.service_endpoint
+    
+    # Example 2: Azure Resource Manager Endpoint
+    - name: Create Azure RM service endpoint
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "azure-production"
+        description: "Azure Production Subscription"
+        endpoint_type: "azurerm"
+        url: "https://management.azure.com/"
+        authorization:
+          scheme: "ServicePrincipal"
+          parameters:
+            tenantid: "{{ lookup('env', 'AZURE_TENANT_ID') }}"
+            serviceprincipalid: "{{ lookup('env', 'AZURE_SP_ID') }}"
+            authenticationType: "spnKey"
+            serviceprincipalkey: "{{ lookup('env', 'AZURE_SP_KEY') }}"
+        data:
+          subscriptionId: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+          subscriptionName: "Production Subscription"
+          environment: "AzureCloud"
+          scopeLevel: "Subscription"
+          creationMode: "Manual"
+        state: present
+      no_log: false  # Set to true in production
+    
+    # Example 3: GitHub Connection
+    - name: Create GitHub service endpoint
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "github-repos"
+        description: "GitHub Repository Connection"
+        endpoint_type: "github"
+        url: "https://github.com"
+        authorization:
+          scheme: "PersonalAccessToken"
+          parameters:
+            accessToken: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+        state: present
+    
+    # Example 4: Docker Registry
+    - name: Create Docker Hub service endpoint
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "docker-hub"
+        description: "Docker Hub Registry"
+        endpoint_type: "dockerregistry"
+        url: "https://index.docker.io/v1/"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "{{ lookup('env', 'DOCKER_USERNAME') }}"
+            password: "{{ lookup('env', 'DOCKER_PASSWORD') }}"
+            email: "{{ lookup('env', 'DOCKER_EMAIL') }}"
+            registry: "https://index.docker.io/v1/"
+        state: present
+    
+    # Example 5: Private Docker Registry
+    - name: Create private Docker registry endpoint
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "acr-production"
+        description: "Azure Container Registry - Production"
+        endpoint_type: "dockerregistry"
+        url: "myregistry.azurecr.io"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "{{ acr_username }}"
+            password: "{{ acr_password }}"
+            email: "devops@example.com"
+            registry: "myregistry.azurecr.io"
+        state: present
+    
+    # Example 6: Update existing endpoint
+    - name: Update service endpoint description
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "external-api"
+        description: "Updated: Connection to external REST API"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "{{ api_username }}"
+            password: "{{ api_password }}"
+        state: present
+      register: update_result
+    
+    - name: Show if changes were made
+      debug:
+        msg: "Endpoint was {{ 'updated' if update_result.changed else 'unchanged' }}"
+    
+    # Example 7: Create multiple endpoints from a list
+    - name: Create service endpoints from list
+      azure_devops_service_endpoint:
+        organization: "{{ ado_org }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        endpoint_type: "{{ item.type }}"
+        url: "{{ item.url }}"
+        authorization: "{{ item.auth }}"
+        state: present
+      loop:
+        - name: "dev-api"
+          description: "Development API"
+          type: "generic"
+          url: "https://dev-api.example.com"
+          auth:
+            scheme: "UsernamePassword"
+            parameters:
+              username: "dev-user"
+              password: "dev-pass"
+        - name: "staging-api"
+          description: "Staging API"
+          type: "generic"
+          url: "https://staging-api.example.com"
+          auth:
+            scheme: "UsernamePassword"
+            parameters:
+              username: "staging-user"
+              password: "staging-pass"
+      no_log: true
+    
+    # Uncomment to delete endpoints
+    # - name: Delete old service endpoint
+    #   azure_devops_service_endpoint:
+    #     organization: "{{ ado_org }}"
+    #     project: "{{ ado_project }}"
+    #     personal_access_token: "{{ ado_pat }}"
+    #     name: "old-endpoint"
+    #     state: absent

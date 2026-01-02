@@ -1,0 +1,171 @@
+---
+# Example playbook demonstrating Azure DevOps pipeline management
+- name: Manage Azure DevOps Pipelines
+  hosts: localhost
+  gather_facts: false
+  vars:
+    azure_devops_org_url: "https://dev.azure.com/your-organization"
+    azure_devops_project: "YourProject"
+    # PAT can be set via AZURE_DEVOPS_PAT environment variable
+    # or passed directly (not recommended for production)
+  
+  tasks:
+    # Example 1: Create a new pipeline
+    - name: Create build pipeline
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-build"
+        folder: "\\Builds"
+        repository_name: "my-app-repo"
+        repository_type: "azureReposGit"
+        yaml_path: "/azure-pipelines.yml"
+        state: present
+      register: build_pipeline
+
+    - name: Display pipeline info
+      debug:
+        msg: "Pipeline created with ID: {{ build_pipeline.pipeline.id }}"
+
+    # Example 2: Create a deployment pipeline in a subfolder
+    - name: Create deployment pipeline
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-deploy"
+        folder: "\\Deployments\\Production"
+        repository_name: "my-app-repo"
+        yaml_path: "/pipelines/deploy.yml"
+        state: present
+
+    # Example 3: Create pipeline using repository ID
+    - name: Create pipeline with repo ID
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "integration-tests"
+        repository_id: "12345678-1234-1234-1234-123456789012"
+        yaml_path: "/tests/integration-pipeline.yml"
+        state: present
+
+    # Example 4: Run a pipeline
+    - name: Run build pipeline
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-build"
+        folder: "\\Builds"
+        state: run
+      register: pipeline_run
+
+    - name: Display run info
+      debug:
+        msg: "Pipeline run {{ pipeline_run.run.name }} started with ID: {{ pipeline_run.run.id }}"
+
+    # Example 5: Run pipeline with variables
+    - name: Run pipeline with custom variables
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-build"
+        variables:
+          BuildConfiguration: "Release"
+          RunTests: "true"
+          DeployEnvironment: "Staging"
+        state: run
+
+    # Example 6: Run pipeline on specific branch
+    - name: Run pipeline on feature branch
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-build"
+        branch: "feature/new-feature"
+        variables:
+          BuildConfiguration: "Debug"
+        state: run
+
+    # Example 7: Run pipeline and wait for completion
+    - name: Run pipeline and wait
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-deploy"
+        folder: "\\Deployments\\Production"
+        wait_for_completion: true
+        wait_timeout: 900  # 15 minutes
+        variables:
+          Environment: "Production"
+          ApprovalRequired: "true"
+        state: run
+      register: deployment_run
+
+    - name: Check deployment result
+      debug:
+        msg: "Deployment {{ deployment_run.run.result }}"
+      when: deployment_run.run.result is defined
+
+    # Example 8: Run pipeline with template parameters
+    - name: Run pipeline with template parameters
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-build"
+        template_parameters:
+          environment: "production"
+          deploymentSlot: "blue"
+        state: run
+
+    # Example 9: Conditional pipeline run based on previous results
+    - name: Run deployment only if build succeeded
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "my-app-deploy"
+        branch: "main"
+        state: run
+      when: deployment_run.run.result == "succeeded"
+
+    # Example 10: Delete a pipeline
+    - name: Delete old pipeline
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "legacy-pipeline"
+        folder: "\\Archive"
+        state: absent
+
+    # Example 11: Create multiple pipelines from a list
+    - name: Create multiple pipelines
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "{{ item.name }}"
+        folder: "{{ item.folder }}"
+        repository_name: "{{ item.repo }}"
+        yaml_path: "{{ item.yaml_path }}"
+        state: present
+      loop:
+        - name: "frontend-build"
+          folder: "\\Builds"
+          repo: "frontend-repo"
+          yaml_path: "/pipelines/build.yml"
+        - name: "backend-build"
+          folder: "\\Builds"
+          repo: "backend-repo"
+          yaml_path: "/pipelines/build.yml"
+        - name: "frontend-deploy"
+          folder: "\\Deployments"
+          repo: "frontend-repo"
+          yaml_path: "/pipelines/deploy.yml"
+
+    # Example 12: GitHub repository pipeline
+    - name: Create pipeline for GitHub repo
+      basicPr0grammer.azure_devops.azure_devops_pipeline:
+        organization_url: "{{ azure_devops_org_url }}"
+        project: "{{ azure_devops_project }}"
+        name: "github-project-build"
+        repository_type: "github"
+        repository_id: "owner/repo-name"
+        yaml_path: "/.azure-pipelines/build.yml"
+        state: present

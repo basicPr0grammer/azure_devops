@@ -1,0 +1,113 @@
+---
+- name: Test Service Hooks Management
+  block:
+    - name: List all service hook subscriptions
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        state: info
+      register: all_hooks
+
+    - name: Verify subscriptions listed
+      assert:
+        that:
+          - all_hooks.subscriptions is defined
+
+    - name: Create webhook for User Story updates
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.updated
+        consumer_type: webHooks
+        webhook_url: "https://webhook.site/test-{{ 999999 | random }}"
+        work_item_type: "User Story"
+        state: present
+      register: user_story_hook
+
+    - name: Verify User Story webhook created
+      assert:
+        that:
+          - user_story_hook.changed
+          - user_story_hook.subscription.id is defined
+          - user_story_hook.subscription.event_type == "workitem.updated"
+          - user_story_hook.subscription.consumer_id == "webHooks"
+          - user_story_hook.subscription.status == "enabled"
+
+    - name: Create webhook for User Story updates again (idempotency test)
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.updated
+        consumer_type: webHooks
+        webhook_url: "https://webhook.site/test-{{ 999999 | random }}"
+        work_item_type: "User Story"
+        state: present
+      register: idempotent_hook
+
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_hook.changed
+
+    - name: Create webhook for Bug creation
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.created
+        consumer_type: webHooks
+        webhook_url: "https://webhook.site/test-bugs-{{ 999999 | random }}"
+        work_item_type: "Bug"
+        state: present
+      register: bug_hook
+
+    - name: Verify Bug webhook created
+      assert:
+        that:
+          - bug_hook.changed
+          - bug_hook.subscription.id is defined
+          - bug_hook.subscription.event_type == "workitem.created"
+
+    - name: Get specific subscription
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        subscription_id: "{{ user_story_hook.subscription.id }}"
+        state: info
+      register: specific_hook
+
+    - name: Verify specific subscription retrieved
+      assert:
+        that:
+          - specific_hook.subscription is defined
+          - specific_hook.subscription.id == user_story_hook.subscription.id
+
+    - name: Delete User Story webhook
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        subscription_id: "{{ user_story_hook.subscription.id }}"
+        state: absent
+      register: deleted_hook
+
+    - name: Verify webhook deleted
+      assert:
+        that:
+          - deleted_hook.changed
+
+    - name: Delete User Story webhook again (idempotency test)
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        subscription_id: "{{ user_story_hook.subscription.id }}"
+        state: absent
+      register: deleted_again
+
+    - name: Verify delete idempotency
+      assert:
+        that:
+          - not deleted_again.changed
+
+  always:
+    - name: Cleanup - Delete Bug webhook
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        subscription_id: "{{ bug_hook.subscription.id }}"
+        state: absent
+      when: bug_hook.subscription.id is defined
+      ignore_errors: true

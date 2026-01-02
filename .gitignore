@@ -1,0 +1,30 @@
+# Ansible Azure DevOps Collection
+
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.tox/
+htmlcov/
+.coverage
+
+# Environment
+.env
+venv/
+env/

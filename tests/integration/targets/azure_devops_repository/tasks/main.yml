@@ -1,0 +1,232 @@
+---
+# Integration tests for azure_devops_repository module
+
+- name: Set test variables
+  set_fact:
+    test_repo_name: "ansible-test-repo-{{ ansible_date_time.epoch }}"
+    test_repo_fork: "ansible-test-fork-{{ ansible_date_time.epoch }}"
+
+# Test 1: Create a new repository
+- name: Create new repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    state: present
+  register: create_result
+
+- name: Verify repository was created
+  assert:
+    that:
+      - create_result.changed
+      - create_result.repository.name == test_repo_name
+      - create_result.repository.id is defined
+      - create_result.repository.url is defined
+      - create_result.repository.remote_url is defined
+      - create_result.repository.ssh_url is defined
+    fail_msg: "Repository creation failed"
+    success_msg: "✓ Repository created successfully"
+
+- name: Store repository ID
+  set_fact:
+    test_repo_id: "{{ create_result.repository.id }}"
+
+# Test 2: Verify idempotency - create again (should not change)
+- name: Try to create the same repository again
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    state: present
+  register: create_again
+
+- name: Verify idempotency
+  assert:
+    that:
+      - not create_again.changed
+      - create_again.repository.id == test_repo_id
+    fail_msg: "Idempotency check failed - repository was modified"
+    success_msg: "✓ Idempotency verified - no change"
+
+# Test 3: Update default branch (will fail for empty repo, which is expected)
+- name: Try to set default branch on empty repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    default_branch: "main"
+    state: present
+  register: set_branch
+  ignore_errors: true
+
+- name: Verify default branch warning
+  debug:
+    msg: "Note: Setting default branch on empty repository may fail. This is expected and will be tested with an existing repo."
+
+# Test 4: Disable repository
+- name: Disable the repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    is_disabled: true
+    state: present
+  register: disable_result
+
+- name: Verify repository was disabled
+  assert:
+    that:
+      - disable_result.changed
+      - disable_result.repository.is_disabled == true
+    fail_msg: "Failed to disable repository"
+    success_msg: "✓ Repository disabled successfully"
+
+# Test 5: Verify disable idempotency
+- name: Try to disable again
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    is_disabled: true
+    state: present
+  register: disable_again
+
+- name: Verify disable idempotency
+  assert:
+    that:
+      - not disable_again.changed
+      - disable_again.repository.is_disabled == true
+    fail_msg: "Disable idempotency check failed"
+    success_msg: "✓ Disable idempotency verified"
+
+# Test 6: Re-enable repository
+- name: Re-enable the repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    is_disabled: false
+    state: present
+  register: enable_result
+
+- name: Verify repository was re-enabled
+  assert:
+    that:
+      - enable_result.changed
+      - enable_result.repository.is_disabled == false
+    fail_msg: "Failed to re-enable repository"
+    success_msg: "✓ Repository re-enabled successfully"
+
+# Test 7: Test with an existing repository that has content
+- name: Test default branch with existing repo (repoName)
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "repoName"
+    default_branch: "dev"
+    state: present
+  register: existing_repo_result
+
+- name: Verify existing repository update
+  assert:
+    that:
+      - existing_repo_result.repository.name == "repoName"
+      - existing_repo_result.repository.default_branch == "refs/heads/dev"
+    fail_msg: "Failed to update existing repository"
+    success_msg: "✓ Existing repository default branch set successfully"
+
+# Test 8: Verify default branch idempotency
+- name: Set same default branch again
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "repoName"
+    default_branch: "dev"
+    state: present
+  register: branch_again
+
+- name: Verify default branch idempotency
+  assert:
+    that:
+      - not branch_again.changed
+      - branch_again.repository.default_branch == "refs/heads/dev"
+    fail_msg: "Default branch idempotency check failed"
+    success_msg: "✓ Default branch idempotency verified"
+
+# Test 9: Fork a repository (optional - only if parent repo exists)
+- name: Fork test repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_fork }}"
+    parent_repository_id: "{{ test_repo_id }}"
+    state: present
+  register: fork_result
+  ignore_errors: true
+
+- name: Show fork result
+  debug:
+    msg: "Fork result: {{ 'Success' if not fork_result.failed else 'Failed (may not be supported)' }}"
+
+# Test 10: Delete the test repository
+- name: Delete test repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    state: absent
+  register: delete_result
+
+- name: Verify deletion
+  assert:
+    that:
+      - delete_result.changed
+      - delete_result.repository.state == 'deleted'
+    fail_msg: "Repository deletion failed"
+    success_msg: "✓ Repository deleted successfully"
+
+# Test 11: Verify deletion idempotency
+- name: Try to delete already-deleted repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_name }}"
+    state: absent
+  register: delete_again
+
+- name: Verify deletion idempotency
+  assert:
+    that:
+      - not delete_again.changed
+    fail_msg: "Deletion idempotency check failed"
+    success_msg: "✓ Deletion idempotency verified"
+
+# Clean up: Delete fork if it was created
+- name: Clean up - delete fork repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_repo_fork }}"
+    state: absent
+  register: cleanup_fork
+  ignore_errors: true
+
+- name: Display test summary
+  debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════╗
+      ║  REPOSITORY MODULE INTEGRATION TESTS COMPLETED             ║
+      ╚════════════════════════════════════════════════════════════╝
+      
+      ✓ Create repository
+      ✓ Create idempotency
+      ✓ Disable repository
+      ✓ Disable idempotency
+      ✓ Re-enable repository
+      ✓ Set default branch (existing repo)
+      ✓ Default branch idempotency
+      ✓ Delete repository
+      ✓ Delete idempotency
+      
+      All tests passed! 🎉

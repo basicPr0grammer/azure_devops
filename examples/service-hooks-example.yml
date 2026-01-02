@@ -1,0 +1,228 @@
+---
+# Example: Azure DevOps Service Hooks (Webhooks)
+#
+# This example demonstrates how to set up webhooks for Azure DevOps events
+# such as work item changes, pull requests, builds, etc.
+
+- name: Manage Azure DevOps Service Hooks
+  hosts: localhost
+  gather_facts: false
+  vars:
+    organization_url: "https://dev.azure.com/MyOrg"
+    project_name: "MyProject"
+
+  tasks:
+    # ===========================================
+    # Work Item Webhooks
+    # ===========================================
+
+    - name: Create webhook for User Story updates
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.updated
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/user-stories"
+        work_item_type: "User Story"
+        state: present
+      register: user_story_webhook
+
+    - name: Create webhook for Bug creation
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.created
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/new-bugs"
+        work_item_type: "Bug"
+        state: present
+
+    - name: Create webhook for all work item changes
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.updated
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/all-workitems"
+        state: present
+
+    - name: Create webhook for work item comments
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.commented
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/workitem-comments"
+        state: present
+
+    - name: Create webhook for specific area path
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.updated
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/feature-team"
+        area_path: "MyProject\\Feature Team"
+        state: present
+
+    # ===========================================
+    # Pull Request Webhooks
+    # ===========================================
+
+    - name: Create webhook for new pull requests
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: git.pullrequest.created
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/new-pr"
+        state: present
+
+    - name: Create webhook for pull request updates
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: git.pullrequest.updated
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/pr-updates"
+        state: present
+
+    # ===========================================
+    # Build/Pipeline Webhooks
+    # ===========================================
+
+    - name: Create webhook for build completion
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: build.complete
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/build-complete"
+        state: present
+
+    - name: Create webhook for release deployment
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: release.deployment.completed
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/deployment"
+        state: present
+
+    # ===========================================
+    # Git Push Webhooks
+    # ===========================================
+
+    - name: Create webhook for git push
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: git.push
+        consumer_type: webHooks
+        webhook_url: "https://my-server.com/webhook/git-push"
+        state: present
+
+    # ===========================================
+    # Slack/Teams Integration
+    # ===========================================
+
+    - name: Send PR notifications to Slack
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: git.pullrequest.created
+        consumer_type: slack
+        webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+        state: present
+
+    - name: Send build notifications to Teams
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: build.complete
+        consumer_type: teams
+        webhook_url: "https://outlook.office.com/webhook/YOUR-WEBHOOK-URL"
+        state: present
+
+    # ===========================================
+    # Managing Webhooks
+    # ===========================================
+
+    - name: List all service hook subscriptions
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        state: info
+      register: all_hooks
+
+    - name: Display all webhooks
+      debug:
+        msg: "Found {{ all_hooks.subscriptions | length }} subscriptions"
+
+    - name: Get specific subscription details
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        subscription_id: "{{ user_story_webhook.subscription.id }}"
+        state: info
+      register: subscription_details
+
+    - name: Delete a webhook
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        subscription_id: "{{ user_story_webhook.subscription.id }}"
+        state: absent
+
+    # ===========================================
+    # Real-World Example: Automated Notifications
+    # ===========================================
+
+    - name: Set up automated notification system
+      block:
+        - name: Notify on high-priority bugs
+          basicPr0grammer.azure_devops.azure_devops_service_hook:
+            organization_url: "{{ organization_url }}"
+            project: "{{ project_name }}"
+            event_type: workitem.created
+            consumer_type: webHooks
+            webhook_url: "https://my-server.com/webhook/high-priority-bugs"
+            work_item_type: "Bug"
+            state: present
+
+        - name: Notify on User Story completion
+          basicPr0grammer.azure_devops.azure_devops_service_hook:
+            organization_url: "{{ organization_url }}"
+            project: "{{ project_name }}"
+            event_type: workitem.updated
+            consumer_type: webHooks
+            webhook_url: "https://my-server.com/webhook/story-complete"
+            work_item_type: "User Story"
+            field_name: "System.State"
+            state: present
+
+        - name: Notify on failed builds
+          basicPr0grammer.azure_devops.azure_devops_service_hook:
+            organization_url: "{{ organization_url }}"
+            project: "{{ project_name }}"
+            event_type: build.complete
+            consumer_type: webHooks
+            webhook_url: "https://my-server.com/webhook/build-failures"
+            state: present
+
+    # ===========================================
+    # Using webhook.site for Testing
+    # ===========================================
+    # You can use https://webhook.site to generate a unique URL
+    # and test your webhooks before integrating with real systems
+
+    - name: Test webhook with webhook.site
+      basicPr0grammer.azure_devops.azure_devops_service_hook:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        event_type: workitem.updated
+        consumer_type: webHooks
+        webhook_url: "https://webhook.site/your-unique-id"
+        state: present
+      register: test_webhook
+
+    - name: Display test webhook URL
+      debug:
+        msg: "Test your webhook at: https://webhook.site/your-unique-id"

@@ -1,0 +1,11 @@
+---
+# Test playbook for azure_devops_pipeline module
+- name: Test Azure DevOps Pipeline Module
+  hosts: localhost
+  gather_facts: false
+  collections:
+    - basicPr0grammer.azure_devops
+  
+  tasks:
+    - name: Include pipeline tests
+      include_tasks: tasks/main.yml

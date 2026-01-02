@@ -1,0 +1,116 @@
+---
+- name: Test Work Item Management
+  block:
+    - name: Create a User Story
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_type: "User Story"
+        title: "Test User Story - Integration Test"
+        description: "This is a test user story created by integration tests"
+        state: present
+        tags: "test,automation"
+        priority: 2
+      register: user_story
+
+    - name: Verify User Story created
+      assert:
+        that:
+          - user_story.changed
+          - user_story.work_item.id is defined
+          - user_story.work_item.fields['System.Title'] == "Test User Story - Integration Test"
+          - user_story.work_item.fields['System.WorkItemType'] == "User Story"
+
+    - name: Create a Task linked to User Story
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_type: "Task"
+        title: "Test Task - Integration Test"
+        description: "This is a test task"
+        state: present
+        parent_work_item_id: "{{ user_story.work_item.id }}"
+      register: task
+
+    - name: Verify Task created and linked
+      assert:
+        that:
+          - task.changed
+          - task.work_item.id is defined
+          - task.work_item.fields['System.Title'] == "Test Task - Integration Test"
+
+    - name: Create a Bug
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_type: "Bug"
+        title: "Test Bug - Integration Test"
+        description: "<p>This is a <strong>test bug</strong> with HTML formatting</p>"
+        state: present
+        severity: "2 - High"
+        priority: 1
+      register: bug
+
+    - name: Verify Bug created
+      assert:
+        that:
+          - bug.changed
+          - bug.work_item.id is defined
+          - bug.work_item.fields['System.WorkItemType'] == "Bug"
+
+    - name: Update User Story state
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_id: "{{ user_story.work_item.id }}"
+        work_item_state: "Active"
+        state: present
+      register: updated_story
+
+    - name: Verify User Story updated
+      assert:
+        that:
+          - updated_story.changed
+          - updated_story.work_item.fields['System.State'] == "Active"
+
+    - name: Update User Story state again (idempotency test)
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_id: "{{ user_story.work_item.id }}"
+        work_item_state: "Active"
+        state: present
+      register: idempotent_update
+
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_update.changed
+
+  always:
+    - name: Delete Task
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_id: "{{ task.work_item.id }}"
+        state: absent
+      when: task.work_item.id is defined
+      ignore_errors: true
+
+    - name: Delete Bug
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_id: "{{ bug.work_item.id }}"
+        state: absent
+      when: bug.work_item.id is defined
+      ignore_errors: true
+
+    - name: Delete User Story
+      basicPr0grammer.azure_devops.azure_devops_work_item:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project_name }}"
+        work_item_id: "{{ user_story.work_item.id }}"
+        state: absent
+      when: user_story.work_item.id is defined
+      ignore_errors: true

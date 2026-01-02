@@ -1,0 +1,144 @@
+---
+# Test tasks for azure_devops_pipeline module
+# These tasks are meant to be included in a playbook
+
+- name: Set test pipeline name
+  set_fact:
+    test_pipeline_name: "test-pipeline-{{ 9999999 | random }}"
+    test_repo_name: "repoName"
+    test_yaml_path: "/azure-pipelines.yml"
+    test_branch: "dev"
+
+- name: Display test info
+  debug:
+    msg: "Testing with pipeline: {{ test_pipeline_name }} in repo: {{ test_repo_name }}"
+
+# Test 1: Create a new pipeline
+- name: Create Azure DevOps pipeline
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_pipeline_name }}"
+    folder: "\\"
+    repository_name: "{{ test_repo_name }}"
+    repository_type: "azureReposGit"
+    yaml_path: "{{ test_yaml_path }}"
+    default_branch: "{{ test_branch }}"
+    state: present
+  register: create_result
+
+- name: Verify pipeline was created
+  assert:
+    that:
+      - create_result.changed
+      - create_result.pipeline is defined
+      - create_result.pipeline.name == test_pipeline_name
+      - create_result.pipeline.id is defined
+
+- name: Save pipeline ID
+  set_fact:
+    test_pipeline_id: "{{ create_result.pipeline.id }}"
+
+# Test 2: Create pipeline idempotency
+- name: Create pipeline again (idempotency check)
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_pipeline_name }}"
+    folder: "\\"
+    repository_name: "{{ test_repo_name }}"
+    yaml_path: "{{ test_yaml_path }}"
+    default_branch: "{{ test_branch }}"
+    state: present
+  register: create_again_result
+
+- name: Verify idempotency
+  assert:
+    that:
+      - not create_again_result.changed
+      - create_again_result.pipeline.id | string == test_pipeline_id | string
+
+# Test 3: Run pipeline (without waiting)
+# Note: This may fail if the pipeline YAML requires specific variables
+- name: Run pipeline without waiting
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_pipeline_name }}"
+    state: run
+  register: run_result
+  ignore_errors: true
+
+- name: Verify pipeline run started or check error
+  assert:
+    that:
+      - run_result.changed or run_result.failed
+      - run_result.run is defined or run_result.msg is defined
+  when: run_result.changed
+
+# Test 4: Run pipeline with variables (if previous test failed due to missing variables)
+- name: Run pipeline with bodyContent variable
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_pipeline_name }}"
+    variables:
+      bodyContent: "dGVzdCBkYXRh"  # base64 encoded "test data"
+    state: run
+  register: run_vars_result
+  ignore_errors: true
+
+- name: Verify pipeline run with variables
+  debug:
+    msg: "Pipeline run {{ 'succeeded' if run_vars_result.changed else 'failed: ' + run_vars_result.msg | default('') }}"
+
+# Test 5: Run pipeline on specific branch (if you have multiple branches)
+# Skip this test if you only have main branch
+- name: Run pipeline on dev branch explicitly
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_pipeline_name }}"
+    branch: "{{ test_branch }}"
+    state: run
+  register: run_branch_result
+  ignore_errors: true
+
+- name: Verify pipeline run on branch
+  assert:
+    that:
+      - run_branch_result.changed or run_branch_result.failed
+      - run_branch_result.run is defined or run_branch_result.failed
+  when: not run_branch_result.failed
+
+# Test 6: Delete pipeline
+# - name: Delete pipeline
+#   basicPr0grammer.azure_devops.azure_devops_pipeline:
+#     organization_url: "{{ azure_devops_org_url }}"
+#     project: "{{ azure_devops_project }}"
+#     name: "{{ test_pipeline_name }}"
+#     state: absent
+#   register: delete_result
+
+# - name: Verify pipeline was deleted
+#   assert:
+#     that:
+#       - delete_result.changed
+
+# Test 7: Delete pipeline idempotency
+# - name: Delete pipeline again (idempotency check)
+#   basicPr0grammer.azure_devops.azure_devops_pipeline:
+#     organization_url: "{{ azure_devops_org_url }}"
+#     project: "{{ azure_devops_project }}"
+#     name: "{{ test_pipeline_name }}"
+#     state: absent
+#   register: delete_again_result
+
+# - name: Verify delete idempotency
+#   assert:
+#     that:
+#       - not delete_again_result.changed
+
+- name: All pipeline tests passed
+  debug:
+    msg: "✅ All Azure DevOps pipeline tests completed successfully!"

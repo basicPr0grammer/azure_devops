@@ -1,0 +1,42 @@
+---
+namespace: basicpr0grammer
+name: azure_devops
+version: 1.0.0
+readme: README.md
+authors:
+  - basicPr0grammer
+
+description: Ansible collection for managing Azure DevOps resources including repositories, branch policies, pipelines, environments, work items, agent pools, service hooks, and more
+
+license:
+  - GPL-3.0-or-later
+
+tags:
+  - azure
+  - devops
+  - azuredevops
+  - cicd
+  - azure_devops
+  - ado
+
+repository: https://github.com/basicPr0grammer/azure_devops
+
+documentation: https://github.com/basicPr0grammer/azure_devops/blob/main/README.md
+
+homepage: https://github.com/basicPr0grammer/azure_devops
+
+issues: https://github.com/basicPr0grammer/azure_devops/issues
+
+build_ignore:
+  - "*.tar.gz"
+  - .gitignore
+  - .git
+  - __pycache__
+  - "*.pyc"
+  - .vscode
+  - .idea
+  - test*.yml
+  - test*.py
+  - test.py
+
+dependencies: {}

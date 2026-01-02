@@ -1,0 +1,5 @@
+# Azure DevOps Python SDK
+azure-devops
+
+# Required dependencies
+msrest>=0.7.1

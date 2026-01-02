@@ -1,0 +1,201 @@
+---
+# Integration tests for azure_devops_branch_policy module
+
+- name: Set test variables
+  set_fact:
+    test_repo_name: "test-branch-policy-{{ 999999 | random }}"
+    test_branch: "main"
+
+- name: Create test repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_repo_name }}"
+    state: present
+  register: test_repo
+
+- name: Set repository ID
+  set_fact:
+    test_repo_id: "{{ test_repo.repository.id }}"
+
+# Test 1: Create minimum reviewers policy
+- name: Create minimum reviewers policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: minimum_reviewers
+    state: present
+    is_blocking: true
+    minimum_approver_count: 2
+    creator_vote_counts: false
+    reset_on_source_push: true
+  register: min_reviewers_result
+
+- name: Verify minimum reviewers policy creation
+  assert:
+    that:
+      - min_reviewers_result.changed
+      - min_reviewers_result.policy.id is defined
+      - min_reviewers_result.policy.is_blocking == true
+      - min_reviewers_result.policy.is_enabled == true
+      - min_reviewers_result.policy.settings.minimumApproverCount == 2
+    fail_msg: "Minimum reviewers policy creation failed"
+    success_msg: "✅ Test 1 passed: Minimum reviewers policy created"
+
+# Test 2: Idempotency - create same policy again
+- name: Create same minimum reviewers policy (idempotency test)
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: minimum_reviewers
+    state: present
+    is_blocking: true
+    minimum_approver_count: 2
+    creator_vote_counts: false
+    reset_on_source_push: true
+  register: min_reviewers_idempotent
+
+- name: Verify idempotency
+  assert:
+    that:
+      - not min_reviewers_idempotent.changed
+      - min_reviewers_idempotent.policy.id == min_reviewers_result.policy.id
+    fail_msg: "Idempotency test failed"
+    success_msg: "✅ Test 2 passed: Idempotency verified"
+
+# Test 3: Update policy settings
+- name: Update minimum reviewers policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: minimum_reviewers
+    state: present
+    is_blocking: false
+    minimum_approver_count: 3
+    creator_vote_counts: true
+    reset_on_source_push: false
+  register: min_reviewers_updated
+
+- name: Verify policy update
+  assert:
+    that:
+      - min_reviewers_updated.changed
+      - min_reviewers_updated.policy.is_blocking == false
+      - min_reviewers_updated.policy.settings.minimumApproverCount == 3
+      - min_reviewers_updated.policy.settings.creatorVoteCounts == true
+      - min_reviewers_updated.policy.settings.resetOnSourcePush == false
+    fail_msg: "Policy update failed"
+    success_msg: "✅ Test 3 passed: Policy updated successfully"
+
+# Test 4: Create work item linking policy
+- name: Create work item linking policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: work_item_linking
+    state: present
+    is_blocking: false
+  register: work_item_result
+
+- name: Verify work item linking policy
+  assert:
+    that:
+      - work_item_result.changed
+      - work_item_result.policy.id is defined
+      - work_item_result.policy.is_blocking == false
+    fail_msg: "Work item linking policy creation failed"
+    success_msg: "✅ Test 4 passed: Work item linking policy created"
+
+# Test 5: Create comment resolution policy
+- name: Create comment resolution policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: comment_resolution
+    state: present
+    is_blocking: true
+  register: comment_result
+
+- name: Verify comment resolution policy
+  assert:
+    that:
+      - comment_result.changed
+      - comment_result.policy.id is defined
+      - comment_result.policy.is_blocking == true
+    fail_msg: "Comment resolution policy creation failed"
+    success_msg: "✅ Test 5 passed: Comment resolution policy created"
+
+# Test 6: Delete minimum reviewers policy
+- name: Delete minimum reviewers policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: minimum_reviewers
+    state: absent
+  register: min_reviewers_deleted
+
+- name: Verify policy deletion
+  assert:
+    that:
+      - min_reviewers_deleted.changed
+      - min_reviewers_deleted.policy.state == 'deleted'
+    fail_msg: "Policy deletion failed"
+    success_msg: "✅ Test 6 passed: Policy deleted successfully"
+
+# Test 7: Verify deletion idempotency
+- name: Try to delete already deleted policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: minimum_reviewers
+    state: absent
+  register: min_reviewers_delete_idempotent
+
+- name: Verify deletion idempotency
+  assert:
+    that:
+      - not min_reviewers_delete_idempotent.changed
+      - min_reviewers_delete_idempotent.policy.state == 'already_absent'
+    fail_msg: "Deletion idempotency failed"
+    success_msg: "✅ Test 7 passed: Deletion idempotency verified"
+
+# Cleanup: Delete remaining policies
+- name: Delete work item linking policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: work_item_linking
+    state: absent
+
+- name: Delete comment resolution policy
+  basicPr0grammer.azure_devops.azure_devops_branch_policy:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    repository_id: "{{ test_repo_id }}"
+    branch_name: "{{ test_branch }}"
+    policy_type: comment_resolution
+    state: absent
+
+# Cleanup: Delete test repository
+- name: Delete test repository
+  basicPr0grammer.azure_devops.azure_devops_repository:
+    organization_url: "{{ azure_devops_org_url }}"
+    project: "{{ azure_devops_project }}"
+    name: "{{ test_repo_name }}"
+    state: absent

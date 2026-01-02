@@ -1,0 +1,208 @@
+---
+# Integration tests for azure_devops_variable_group module
+
+- name: Test azure_devops_variable_group module
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    ado_organization: "{{ lookup('env', 'ADO_ORGANIZATION') }}"
+    ado_project: "{{ lookup('env', 'ADO_PROJECT') }}"
+    ado_pat: "{{ lookup('env', 'AZURE_DEVOPS_PAT') }}"
+    test_group_name: "ansible-test-{{ 999999 | random }}"
+  
+  tasks:
+    - name: Validate required environment variables
+      assert:
+        that:
+          - ado_organization | length > 0
+          - ado_project | length > 0
+          - ado_pat | length > 0
+        fail_msg: "Required environment variables not set: ADO_ORGANIZATION, ADO_PROJECT, AZURE_DEVOPS_PAT"
+    
+    # Test 1: Create a new variable group
+    - name: Create a new variable group
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}"
+        description: "Test variable group created by Ansible"
+        variables:
+          TEST_VAR1: "value1"
+          TEST_VAR2: "value2"
+          ENVIRONMENT: "test"
+        state: present
+      register: create_result
+    
+    - name: Verify variable group was created
+      assert:
+        that:
+          - create_result.changed
+          - create_result.variable_group.name == test_group_name
+          - create_result.variable_group.variables.TEST_VAR1.value == "value1"
+          - create_result.variable_group.variables.TEST_VAR2.value == "value2"
+        fail_msg: "Variable group creation failed"
+    
+    # Test 2: Create same group again (idempotency check)
+    - name: Create same variable group again (should not change)
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}"
+        description: "Test variable group created by Ansible"
+        variables:
+          TEST_VAR1: "value1"
+          TEST_VAR2: "value2"
+          ENVIRONMENT: "test"
+        state: present
+      register: idempotent_result
+    
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_result.changed
+        fail_msg: "Module is not idempotent"
+    
+    # Test 3: Update variable values
+    - name: Update variable values
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}"
+        variables:
+          TEST_VAR1: "updated_value1"
+          TEST_VAR2: "value2"
+          ENVIRONMENT: "test"
+          NEW_VAR: "new_value"
+        state: present
+      register: update_result
+    
+    - name: Verify variable update
+      assert:
+        that:
+          - update_result.changed
+          - update_result.variable_group.variables.TEST_VAR1.value == "updated_value1"
+          - update_result.variable_group.variables.NEW_VAR.value == "new_value"
+        fail_msg: "Variable update failed"
+    
+    # Test 4: Update description
+    - name: Update description
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}"
+        description: "Updated description"
+        variables:
+          TEST_VAR1: "updated_value1"
+          TEST_VAR2: "value2"
+          ENVIRONMENT: "test"
+          NEW_VAR: "new_value"
+        state: present
+      register: desc_update_result
+    
+    - name: Verify description update
+      assert:
+        that:
+          - desc_update_result.changed
+          - desc_update_result.variable_group.description == "Updated description"
+        fail_msg: "Description update failed"
+    
+    # Test 5: Create variable group with secrets
+    - name: Create variable group with secrets
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}-secrets"
+        description: "Test group with secrets"
+        variables:
+          PUBLIC_VAR: "public_value"
+          SECRET_VAR:
+            value: "secret_value"
+            is_secret: true
+          ANOTHER_SECRET:
+            value: "another_secret"
+            is_secret: true
+        state: present
+      register: secret_result
+    
+    - name: Verify secret variable group creation
+      assert:
+        that:
+          - secret_result.changed
+          - secret_result.variable_group.variables.PUBLIC_VAR.value == "public_value"
+          - secret_result.variable_group.variables.SECRET_VAR.is_secret
+          - secret_result.variable_group.variables.SECRET_VAR.value == None
+        fail_msg: "Secret variable group creation failed"
+    
+    # Test 6: Check mode test
+    - name: Test check mode (create)
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}-check-mode"
+        description: "This should not be created"
+        variables:
+          TEST: "value"
+        state: present
+      check_mode: true
+      register: check_create_result
+    
+    - name: Verify check mode reported change
+      assert:
+        that:
+          - check_create_result.changed
+          - "'would be created' in check_create_result.msg"
+        fail_msg: "Check mode failed"
+    
+    # Test 7: Delete variable group
+    - name: Delete variable group
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}"
+        state: absent
+      register: delete_result
+    
+    - name: Verify deletion
+      assert:
+        that:
+          - delete_result.changed
+          - delete_result.variable_group == None
+        fail_msg: "Variable group deletion failed"
+    
+    # Test 8: Delete non-existent group (idempotency)
+    - name: Delete non-existent variable group
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}"
+        state: absent
+      register: delete_idempotent_result
+    
+    - name: Verify delete idempotency
+      assert:
+        that:
+          - not delete_idempotent_result.changed
+        fail_msg: "Delete idempotency failed"
+    
+    # Cleanup: Delete secret variable group
+    - name: Cleanup - Delete secret variable group
+      basicPr0grammer.azure_devops.azure_devops_variable_group:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_group_name }}-secrets"
+        state: absent
+      ignore_errors: true
+    
+    - name: All tests passed
+      debug:
+        msg: "All integration tests completed successfully!"

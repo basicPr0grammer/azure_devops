@@ -1,0 +1,72 @@
+---
+# Note: Agent pool creation/deletion requires organization-level permissions
+# These tests focus on read operations that project admins can perform
+
+- name: Test Agent Pool Management (Read Operations)
+  block:
+    - name: List all agent pools
+      basicPr0grammer.azure_devops.azure_devops_agent_pool:
+        organization_url: "{{ organization_url }}"
+        state: info
+      register: all_pools
+
+    - name: Verify pools listed
+      assert:
+        that:
+          - all_pools.pools is defined
+          - all_pools.pools | length > 0
+
+    - name: Get Default pool details
+      basicPr0grammer.azure_devops.azure_devops_agent_pool:
+        organization_url: "{{ organization_url }}"
+        name: "Default"
+        state: info
+      register: default_pool
+
+    - name: Verify Default pool details
+      assert:
+        that:
+          - default_pool.pool is defined
+          - default_pool.pool.name == "Default"
+          - default_pool.pool.id is defined
+
+    - name: Get Default pool with agent list
+      basicPr0grammer.azure_devops.azure_devops_agent_pool:
+        organization_url: "{{ organization_url }}"
+        name: "Default"
+        state: info
+        list_agents: true
+      register: pool_with_agents
+
+    - name: Verify agent list returned
+      assert:
+        that:
+          - pool_with_agents.pool is defined
+          - pool_with_agents.pool.agents is defined
+
+    - name: Try to get non-existent pool
+      basicPr0grammer.azure_devops.azure_devops_agent_pool:
+        organization_url: "{{ organization_url }}"
+        name: "NonExistentPool-{{ 999999 | random }}"
+        state: info
+      register: missing_pool
+      ignore_errors: true
+
+    - name: Verify non-existent pool handling
+      assert:
+        that:
+          - missing_pool.failed
+
+    - name: Get pool by ID
+      basicPr0grammer.azure_devops.azure_devops_agent_pool:
+        organization_url: "{{ organization_url }}"
+        pool_id: "{{ default_pool.pool.id }}"
+        state: info
+      register: pool_by_id
+
+    - name: Verify pool retrieved by ID
+      assert:
+        that:
+          - pool_by_id.pool is defined
+          - pool_by_id.pool.id == default_pool.pool.id
+          - pool_by_id.pool.name == "Default"

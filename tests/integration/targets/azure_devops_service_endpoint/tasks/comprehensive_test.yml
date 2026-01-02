@@ -1,0 +1,312 @@
+---
+# Comprehensive test playbook for all service endpoint types
+# This tests Azure RM, GitHub, Docker Registry, Kubernetes, and Generic endpoints
+
+- name: Test all service endpoint types
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    ado_organization: "{{ lookup('env', 'ADO_ORGANIZATION') }}"
+    ado_project: "{{ lookup('env', 'ADO_PROJECT') }}"
+    ado_pat: "{{ lookup('env', 'AZURE_DEVOPS_PAT') }}"
+    test_suffix: "{{ 999999 | random }}"
+  
+  tasks:
+    - name: Set test names
+      set_fact:
+        generic_endpoint_name: "test-generic-{{ test_suffix }}"
+        github_endpoint_name: "test-github-{{ test_suffix }}"
+        docker_endpoint_name: "test-docker-{{ test_suffix }}"
+        azurerm_endpoint_name: "test-azurerm-{{ test_suffix }}"
+        k8s_endpoint_name: "test-kubernetes-{{ test_suffix }}"
+    
+    - name: Validate required environment variables
+      assert:
+        that:
+          - ado_organization | length > 0
+          - ado_project | length > 0
+          - ado_pat | length > 0
+        fail_msg: "Required: ADO_ORGANIZATION, ADO_PROJECT, AZURE_DEVOPS_PAT"
+    
+    # ========================================
+    # Test 1: Generic API Endpoint
+    # ========================================
+    - name: Create generic API endpoint with username/password
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ generic_endpoint_name }}"
+        description: "Generic API endpoint for testing"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "apiuser"
+            password: "apipass123"
+        state: present
+      register: generic_result
+    
+    - name: Verify generic endpoint creation
+      assert:
+        that:
+          - generic_result.changed
+          - generic_result.service_endpoint.type == "generic"
+          - generic_result.service_endpoint.url == "https://api.example.com"
+        fail_msg: "Generic endpoint creation failed"
+    
+    - name: Display generic endpoint
+      debug:
+        msg: "Created generic endpoint: {{ generic_result.service_endpoint.name }}"
+    
+    # ========================================
+    # Test 2: GitHub Endpoint
+    # ========================================
+    - name: Create GitHub service endpoint
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ github_endpoint_name }}"
+        description: "GitHub connection for repositories"
+        endpoint_type: "github"
+        url: "https://github.com"
+        authorization:
+          scheme: "PersonalAccessToken"
+          parameters:
+            accessToken: "ghp_faketoken123456789abcdefghijklmnopqr"
+        state: present
+      register: github_result
+    
+    - name: Verify GitHub endpoint creation
+      assert:
+        that:
+          - github_result.changed
+          - github_result.service_endpoint.type == "github"
+          - github_result.service_endpoint.url == "https://github.com"
+        fail_msg: "GitHub endpoint creation failed"
+    
+    - name: Display GitHub endpoint
+      debug:
+        msg: "Created GitHub endpoint: {{ github_result.service_endpoint.name }}"
+    
+    # ========================================
+    # Test 3: Docker Registry (Docker Hub)
+    # ========================================
+    - name: Create Docker Hub registry endpoint
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ docker_endpoint_name }}"
+        description: "Docker Hub registry connection"
+        endpoint_type: "dockerregistry"
+        url: "https://index.docker.io/v1/"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "dockeruser"
+            password: "dockerpass123"
+            email: "user@example.com"
+            registry: "https://index.docker.io/v1/"
+        state: present
+      register: docker_result
+    
+    - name: Verify Docker endpoint creation
+      assert:
+        that:
+          - docker_result.changed
+          - docker_result.service_endpoint.type == "dockerregistry"
+        fail_msg: "Docker endpoint creation failed"
+    
+    - name: Display Docker endpoint
+      debug:
+        msg: "Created Docker endpoint: {{ docker_result.service_endpoint.name }}"
+    
+    # ========================================
+    # Test 4: Azure Resource Manager Endpoint
+    # ========================================
+    - name: Create Azure RM service endpoint (Manual Service Principal)
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ azurerm_endpoint_name }}"
+        description: "Azure subscription connection"
+        endpoint_type: "azurerm"
+        url: "https://management.azure.com/"
+        authorization:
+          scheme: "ServicePrincipal"
+          parameters:
+            tenantid: "00000000-0000-0000-0000-000000000000"
+            serviceprincipalid: "11111111-1111-1111-1111-111111111111"
+            authenticationType: "spnKey"
+            serviceprincipalkey: "fake-sp-key-for-testing"
+        data:
+          subscriptionId: "22222222-2222-2222-2222-222222222222"
+          subscriptionName: "Test Subscription"
+          environment: "AzureCloud"
+          scopeLevel: "Subscription"
+          creationMode: "Manual"
+        state: present
+      register: azurerm_result
+    
+    - name: Verify Azure RM endpoint creation
+      assert:
+        that:
+          - azurerm_result.changed
+          - azurerm_result.service_endpoint.type == "azurerm"
+          - azurerm_result.service_endpoint.url == "https://management.azure.com/"
+        fail_msg: "Azure RM endpoint creation failed"
+    
+    - name: Display Azure RM endpoint
+      debug:
+        msg: "Created Azure RM endpoint: {{ azurerm_result.service_endpoint.name }}"
+    
+    # ========================================
+    # Test 5: Kubernetes Endpoint (Token-based)
+    # ========================================
+    - name: Create Kubernetes service endpoint with Token
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ k8s_endpoint_name }}"
+        description: "Kubernetes cluster connection"
+        endpoint_type: "kubernetes"
+        url: "https://k8s-cluster.example.com:6443"
+        authorization:
+          scheme: "Token"
+          parameters:
+            apitoken: "fake-k8s-service-account-token-for-testing"
+        data:
+          authorizationType: "ServiceAccount"
+          acceptUntrustedCerts: "true"
+        state: present
+      register: k8s_result
+    
+    - name: Verify Kubernetes endpoint creation
+      assert:
+        that:
+          - k8s_result.changed
+          - k8s_result.service_endpoint.type == "kubernetes"
+        fail_msg: "Kubernetes endpoint creation failed"
+    
+    - name: Display Kubernetes endpoint
+      debug:
+        msg: "Created Kubernetes endpoint: {{ k8s_result.service_endpoint.name }}"
+    
+    # ========================================
+    # Test 6: Update Tests
+    # ========================================
+    - name: Update generic endpoint description
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ generic_endpoint_name }}"
+        description: "UPDATED: Generic API endpoint"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "apiuser"
+            password: "apipass123"
+        state: present
+      register: update_result
+    
+    - name: Verify update was detected
+      assert:
+        that:
+          - update_result.changed
+          - update_result.service_endpoint.description == "UPDATED: Generic API endpoint"
+        fail_msg: "Update failed"
+    
+    - name: Run same update again (idempotency test)
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ generic_endpoint_name }}"
+        description: "UPDATED: Generic API endpoint"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "apiuser"
+            password: "apipass123"
+        state: present
+      register: idempotent_result
+    
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_result.changed
+        fail_msg: "Module not idempotent"
+    
+    # ========================================
+    # Test 7: Cleanup - Delete all endpoints
+    # ========================================
+    - name: Delete all test endpoints
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ generic_endpoint_name }}"
+        - "{{ github_endpoint_name }}"
+        - "{{ docker_endpoint_name }}"
+        - "{{ azurerm_endpoint_name }}"
+        - "{{ k8s_endpoint_name }}"
+      register: delete_results
+    
+    - name: Verify all deletions
+      assert:
+        that:
+          - item.changed
+        fail_msg: "Deletion failed for {{ item.service_endpoint }}"
+      loop: "{{ delete_results.results }}"
+    
+    - name: Test delete idempotency
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ generic_endpoint_name }}"
+        state: absent
+      register: delete_idempotent
+    
+    - name: Verify delete idempotency
+      assert:
+        that:
+          - not delete_idempotent.changed
+        fail_msg: "Delete not idempotent"
+    
+    # ========================================
+    # Summary
+    # ========================================
+    - name: Display test summary
+      debug:
+        msg:
+          - "========================================="
+          - "ALL TESTS PASSED SUCCESSFULLY!"
+          - "========================================="
+          - "Tested endpoint types:"
+          - "  ✅ Generic (API)"
+          - "  ✅ GitHub"
+          - "  ✅ Docker Registry"
+          - "  ✅ Azure Resource Manager"
+          - "  ✅ Kubernetes"
+          - ""
+          - "Verified functionality:"
+          - "  ✅ Create operations"
+          - "  ✅ Update operations"
+          - "  ✅ Delete operations"
+          - "  ✅ Idempotency"
+          - "========================================="

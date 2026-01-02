@@ -1,0 +1,12 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  vars:
+    azure_devops_org_url: "{{ organization_url }}"
+    azure_devops_project: "{{ YourProject }}project_name }}"
+  
+  tasks:
+    - name: Run branch policy integration tests
+      include_tasks: tasks/main.yml

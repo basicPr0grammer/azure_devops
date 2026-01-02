@@ -1,0 +1,189 @@
+---
+# Integration tests for azure_devops_service_endpoint module
+
+- name: Test azure_devops_service_endpoint module
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    ado_organization: "{{ lookup('env', 'ADO_ORGANIZATION') }}"
+    ado_project: "{{ lookup('env', 'ADO_PROJECT') }}"
+    ado_pat: "{{ lookup('env', 'AZURE_DEVOPS_PAT') }}"
+  
+  tasks:
+    - name: Set test endpoint name with random suffix
+      set_fact:
+        test_endpoint_name: "ansible-test-endpoint-{{ 999999 | random }}"
+    
+    - name: Validate required environment variables
+      assert:
+        that:
+          - ado_organization | length > 0
+          - ado_project | length > 0
+          - ado_pat | length > 0
+        fail_msg: "Required environment variables not set: ADO_ORGANIZATION, ADO_PROJECT, AZURE_DEVOPS_PAT"
+    
+    # Test 1: Create a generic service endpoint
+    - name: Create a generic service endpoint
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_endpoint_name }}"
+        description: "Test service endpoint created by Ansible"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "testuser"
+            password: "testpass"
+        state: present
+      register: create_result
+    
+    - name: Print out the created service endpoint for debugging
+      debug:
+        var: create_result
+    
+    - name: Verify service endpoint was created
+      assert:
+        that:
+          - create_result.changed
+          - create_result.service_endpoint.name == test_endpoint_name
+          - create_result.service_endpoint.type == "generic"
+          - create_result.service_endpoint.url == "https://api.example.com"
+        fail_msg: "Service endpoint creation failed"
+    
+    # Test 2: Create same endpoint again (idempotency check)
+    - name: Create same service endpoint again (should not change)
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_endpoint_name }}"
+        description: "Test service endpoint created by Ansible"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "testuser"
+            password: "testpass"
+        state: present
+      register: idempotent_result
+    
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_result.changed
+        fail_msg: "Module is not idempotent"
+    
+    # Test 3: Update service endpoint description
+    - name: Update service endpoint description
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_endpoint_name }}" # 
+        description: "Updated description"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "testuser"
+            password: "testpass"
+        state: present
+      register: update_result
+    
+    - name: Verify description update
+      assert:
+        that:
+          - update_result.changed
+          - update_result.service_endpoint.description == "Updated description"
+        fail_msg: "Description update failed"
+    
+    # Test 4: Update service endpoint URL
+    - name: Update service endpoint URL
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_endpoint_name }}"
+        description: "Updated description"
+        endpoint_type: "generic"
+        url: "https://api2.example.com"
+        authorization:
+          scheme: "UsernamePassword"
+          parameters:
+            username: "testuser"
+            password: "testpass"
+        state: present
+      register: url_update_result
+    
+    - name: Verify URL update
+      assert:
+        that:
+          - url_update_result.changed
+          - url_update_result.service_endpoint.url == "https://api2.example.com"
+        fail_msg: "URL update failed"
+    
+    # Test 5: Check mode test
+    - name: Test check mode (create)
+      basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+        organization: "{{ ado_organization }}"
+        project: "{{ ado_project }}"
+        personal_access_token: "{{ ado_pat }}"
+        name: "{{ test_endpoint_name }}-check-mode"
+        description: "This should not be created"
+        endpoint_type: "generic"
+        url: "https://api.example.com"
+        authorization:
+          scheme: "None"
+        state: present
+      check_mode: true
+      register: check_create_result
+    
+    - name: Verify check mode reported change
+      assert:
+        that:
+          - check_create_result.changed
+          - "'would be created' in check_create_result.msg"
+        fail_msg: "Check mode failed"
+    
+    # Test 6: Delete service endpoint
+    # - name: Delete service endpoint
+    #   basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+    #     organization: "{{ ado_organization }}"
+    #     project: "{{ ado_project }}"
+    #     personal_access_token: "{{ ado_pat }}"
+    #     name: "{{ test_endpoint_name }}"
+    #     state: absent
+    #   register: delete_result
+    
+    # - name: Verify deletion
+    #   assert:
+    #     that:
+    #       - delete_result.changed
+    #       - delete_result.service_endpoint == None
+    #     fail_msg: "Service endpoint deletion failed"
+    
+    # Test 7: Delete non-existent endpoint (idempotency)
+    # - name: Delete non-existent service endpoint
+    #   basicPr0grammer.azure_devops.azure_devops_service_endpoint:
+    #     organization: "{{ ado_organization }}"
+    #     project: "{{ ado_project }}"
+    #     personal_access_token: "{{ ado_pat }}"
+    #     name: "{{ test_endpoint_name }}"
+    #     state: absent
+    #   register: delete_idempotent_result
+    
+    # - name: Verify delete idempotency
+    #   assert:
+    #     that:
+    #       - not delete_idempotent_result.changed
+    #     fail_msg: "Delete idempotency failed"
+    
+    - name: All tests passed
+      debug:
+        msg: "All integration tests completed successfully!"

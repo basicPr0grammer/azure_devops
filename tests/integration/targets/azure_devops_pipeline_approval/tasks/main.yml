@@ -1,0 +1,213 @@
+---
+# Integration tests for azure_devops_pipeline_approval module
+# These tests require an existing pipeline with approval requirements
+
+- name: Set test variables
+  set_fact:
+    test_pipeline_name: "Ansible-Approval-Test"
+    test_comment: "Approved via integration test - {{ ansible_date_time.iso8601 }}"
+
+# Test 1: Run a pipeline that requires approval
+- name: Run test pipeline
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_pipeline_name }}"
+    state: run
+  register: pipeline_run
+
+- name: Verify pipeline was queued
+  assert:
+    that:
+      - pipeline_run.changed
+      - pipeline_run.run.id is defined
+      - pipeline_run.run.name is defined
+    fail_msg: "Pipeline failed to queue"
+    success_msg: "✓ Pipeline queued successfully"
+
+- name: Wait for pipeline to reach approval stage
+  pause:
+    prompt: |
+      
+      ⏳ Pipeline Build {{ pipeline_run.run.id }} is running...
+      
+      Please wait for it to reach the approval stage, then press ENTER to continue.
+      
+      Monitor at: {{ pipeline_run.run.url }}
+
+# Test 2: Query pending approvals
+- name: Query all pending approvals
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    state: query
+  register: all_approvals
+
+- name: Verify query returned results
+  assert:
+    that:
+      - all_approvals.approvals is defined
+      - all_approvals.count is defined
+      - all_approvals.count >= 0
+    fail_msg: "Query approvals failed"
+    success_msg: "✓ Query all approvals successful (found {{ all_approvals.count }})"
+
+# Test 3: Query approvals filtered by build_id
+- name: Query approvals for specific build
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    build_id: "{{ pipeline_run.run.id }}"
+    state: query
+  register: build_approvals
+
+- name: Verify build-specific query
+  assert:
+    that:
+      - build_approvals.approvals is defined
+      - build_approvals.count > 0
+      - build_approvals.approvals[0].build_id == pipeline_run.run.id | int
+    fail_msg: "Build-specific query failed"
+    success_msg: "✓ Found {{ build_approvals.count }} approval(s) for build {{ pipeline_run.run.id }}"
+
+- name: Store approval ID for testing
+  set_fact:
+    test_approval_id: "{{ build_approvals.approvals[0].id }}"
+
+# Test 4: Query approvals filtered by status
+- name: Query pending approvals only
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    status: pending
+    state: query
+  register: pending_approvals
+
+- name: Verify status filter works
+  assert:
+    that:
+      - pending_approvals.approvals is defined
+      - pending_approvals.count > 0
+    fail_msg: "Status filter query failed"
+    success_msg: "✓ Filtered by status: found {{ pending_approvals.count }} pending approvals"
+
+# Test 5: Approve the approval
+- name: Approve the pending approval
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    build_id: "{{ pipeline_run.run.id }}"
+    approval_id: "{{ test_approval_id }}"
+    state: approve
+    comment: "{{ test_comment }}"
+  register: approve_result
+
+- name: Verify approval was successful
+  assert:
+    that:
+      - approve_result.changed
+      - approve_result.approval.id == test_approval_id
+      - approve_result.approval.status == 'approved'
+    fail_msg: "Approval failed"
+    success_msg: "✓ Approval successful"
+
+# Test 6: Verify idempotency - approve again (should not change)
+- name: Try to approve already-approved approval
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    build_id: "{{ pipeline_run.run.id }}"
+    approval_id: "{{ test_approval_id }}"
+    state: approve
+    comment: "{{ test_comment }}"
+  register: approve_again
+
+- name: Verify idempotency
+  assert:
+    that:
+      - not approve_again.changed
+      - approve_again.approval.status == 'approved'
+    fail_msg: "Idempotency check failed"
+    success_msg: "✓ Idempotency verified - no change when approving already-approved"
+
+# Test 7: Test reject functionality (needs a new approval)
+- name: Run pipeline again for reject test
+  basicPr0grammer.azure_devops.azure_devops_pipeline:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    name: "{{ test_pipeline_name }}"
+    state: run
+  register: reject_pipeline_run
+
+- name: Wait for second pipeline to reach approval stage
+  pause:
+    prompt: |
+      
+      ⏳ Pipeline Build {{ reject_pipeline_run.run.id }} is running...
+      
+      Please wait for it to reach the approval stage, then press ENTER to continue.
+      
+      Monitor at: {{ reject_pipeline_run.run.url }}
+
+- name: Query approvals for reject test
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    build_id: "{{ reject_pipeline_run.run.id }}"
+    state: query
+  register: reject_approvals
+
+- name: Reject the approval
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    build_id: "{{ reject_pipeline_run.run.id }}"
+    approval_id: "{{ reject_approvals.approvals[0].id }}"
+    state: reject
+    comment: "Rejected via integration test - {{ ansible_date_time.iso8601 }}"
+  register: reject_result
+
+- name: Verify rejection was successful
+  assert:
+    that:
+      - reject_result.changed
+      - reject_result.approval.status == 'rejected'
+    fail_msg: "Rejection failed"
+    success_msg: "✓ Rejection successful"
+
+# Test 8: Verify reject idempotency
+- name: Try to reject already-rejected approval
+  basicPr0grammer.azure_devops.azure_devops_pipeline_approval:
+    organization_url: "{{ organization_url }}"
+    project: "{{ YourProject }}project_name }}"
+    build_id: "{{ reject_pipeline_run.run.id }}"
+    approval_id: "{{ reject_approvals.approvals[0].id }}"
+    state: reject
+    comment: "Rejected via integration test - {{ ansible_date_time.iso8601 }}"
+  register: reject_again
+
+- name: Verify reject idempotency
+  assert:
+    that:
+      - not reject_again.changed
+      - reject_again.approval.status == 'rejected'
+    fail_msg: "Reject idempotency check failed"
+    success_msg: "✓ Reject idempotency verified"
+
+- name: Display test summary
+  debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════╗
+      ║  APPROVAL MODULE INTEGRATION TESTS COMPLETED SUCCESSFULLY  ║
+      ╚════════════════════════════════════════════════════════════╝
+      
+      ✓ Query all approvals
+      ✓ Query approvals by build_id
+      ✓ Query approvals by status
+      ✓ Approve approval
+      ✓ Approve idempotency
+      ✓ Reject approval
+      ✓ Reject idempotency
+      
+      All tests passed! 🎉

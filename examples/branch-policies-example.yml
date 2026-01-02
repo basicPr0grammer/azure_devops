@@ -1,0 +1,176 @@
+---
+# Complete Branch Policies Example
+# This playbook demonstrates all supported branch policy types
+
+- name: Configure Branch Policies
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    org_url: "https://dev.azure.com/YourOrg"
+    project_name: "YourProject"
+    repo_name: "repoName"
+    protected_branch: "main"
+  
+  tasks:
+    # Get repository ID first
+    - name: Get repository information
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        name: "{{ repo_name }}"
+        state: present
+      register: repo_info
+    
+    - name: Set repository ID
+      set_fact:
+        repo_id: "{{ repo_info.repository.id }}"
+    
+    # 1. Minimum Reviewers Policy
+    - name: Require minimum 2 reviewers for main branch
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "{{ protected_branch }}"
+        policy_type: minimum_reviewers
+        state: present
+        is_blocking: true
+        is_enabled: true
+        minimum_approver_count: 2
+        creator_vote_counts: false          # PR creator cannot approve their own PR
+        allow_downvotes: false              # Downvotes not allowed
+        reset_on_source_push: true          # Reset votes when new commits pushed
+      register: min_reviewers_policy
+    
+    - debug:
+        msg: "✅ Minimum reviewers policy: {{ min_reviewers_policy.policy.id }}"
+    
+    # 2. Work Item Linking Policy
+    - name: Require work item linking (warning only)
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "{{ protected_branch }}"
+        policy_type: work_item_linking
+        state: present
+        is_blocking: false                  # Warning only, doesn't block merge
+        is_enabled: true
+      register: work_item_policy
+    
+    - debug:
+        msg: "✅ Work item linking policy: {{ work_item_policy.policy.id }}"
+    
+    # 3. Comment Resolution Policy
+    - name: Require all comments to be resolved
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "{{ protected_branch }}"
+        policy_type: comment_resolution
+        state: present
+        is_blocking: true                   # Blocks merge if comments unresolved
+        is_enabled: true
+      register: comment_policy
+    
+    - debug:
+        msg: "✅ Comment resolution policy: {{ comment_policy.policy.id }}"
+    
+    # 4. Build Validation Policy
+    - name: Require successful build validation
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "{{ protected_branch }}"
+        policy_type: build_validation
+        state: present
+        is_blocking: true
+        is_enabled: true
+        build_definition_id: 10136          # ID of your build pipeline
+        build_display_name: "PR Build Validation"
+        build_manual_queue_only: false      # Auto-queue builds on PR
+        build_queue_on_source_update_only: true  # Only queue when source changes
+        build_valid_duration: 720           # Build valid for 12 hours (720 minutes)
+      register: build_policy
+    
+    - debug:
+        msg: "✅ Build validation policy: {{ build_policy.policy.id }}"
+    
+    # 5. Multiple branches example
+    - name: Apply minimum reviewers to develop branch
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "develop"
+        policy_type: minimum_reviewers
+        state: present
+        is_blocking: true
+        minimum_approver_count: 1           # Only 1 reviewer for develop
+        creator_vote_counts: true           # Creator can approve for develop
+        reset_on_source_push: false
+      register: develop_policy
+    
+    - debug:
+        msg: "✅ Develop branch policy: {{ develop_policy.policy.id }}"
+    
+    # 6. Update existing policy example
+    - name: Update main branch to require 3 reviewers
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "{{ protected_branch }}"
+        policy_type: minimum_reviewers
+        state: present
+        is_blocking: true
+        minimum_approver_count: 3           # Increased from 2 to 3
+        creator_vote_counts: false
+        reset_on_source_push: true
+      register: updated_policy
+    
+    - debug:
+        msg: "Policy updated: {{ updated_policy.changed }}"
+    
+    # 7. Disable a policy (keep it but disable)
+    - name: Disable work item linking policy
+      basicPr0grammer.azure_devops.azure_devops_branch_policy:
+        organization_url: "{{ org_url }}"
+        project: "{{ project_name }}"
+        repository_id: "{{ repo_id }}"
+        branch_name: "{{ protected_branch }}"
+        policy_type: work_item_linking
+        state: present
+        is_enabled: false                   # Disable the policy
+      register: disabled_policy
+    
+    - debug:
+        msg: "Policy disabled: {{ disabled_policy.policy.is_enabled }}"
+    
+    # Summary
+    - name: Show all configured policies
+      debug:
+        msg: |
+          ✅ Branch Policies Configured:
+          
+          Main Branch ({{ protected_branch }}):
+            - Minimum Reviewers: 3 required (blocking)
+            - Work Item Linking: Disabled
+            - Comment Resolution: All comments must be resolved (blocking)
+            - Build Validation: api_pnr_app_release_checks (blocking)
+          
+          Develop Branch:
+            - Minimum Reviewers: 1 required (blocking)
+
+# To remove policies, change state to absent:
+# - name: Remove build validation policy
+#   basicPr0grammer.azure_devops.azure_devops_branch_policy:
+#     organization_url: "{{ org_url }}"
+#     project: "{{ project_name }}"
+#     repository_id: "{{ repo_id }}"
+#     branch_name: "{{ protected_branch }}"
+#     policy_type: build_validation
+#     state: absent

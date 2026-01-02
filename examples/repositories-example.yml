@@ -1,0 +1,144 @@
+---
+# Example: Git Repository Management
+- name: Azure DevOps Repository Management Example
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    organization_url: "https://dev.azure.com/YourOrg"
+    project: "YourProject"
+  
+  tasks:
+    # Example 1: Create a simple repository
+    - name: Create a new repository
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "my-new-project"
+        state: present
+      register: new_repo
+    
+    - name: Show new repository details
+      debug:
+        msg: |
+          ✅ Repository created:
+          - Name: {{ new_repo.repository.name }}
+          - ID: {{ new_repo.repository.id }}
+          - Clone URL: {{ new_repo.repository.remote_url }}
+          - SSH URL: {{ new_repo.repository.ssh_url }}
+          - Web URL: {{ new_repo.repository.web_url }}
+    
+    # Example 2: Create repository and set default branch
+    # Note: Default branch can only be set after first commit
+    - name: Create repository (branch will be set after first push)
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "my-app-repo"
+        state: present
+      register: app_repo
+    
+    - name: Instructions for default branch
+      debug:
+        msg: |
+          📝 Repository created. To set default branch:
+          1. Push your first commit to the desired branch
+          2. Run this playbook again with default_branch parameter
+    
+    # Example 3: Update existing repository default branch
+    - name: Update default branch of existing repo
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "repoName"
+        default_branch: "dev"
+        state: present
+      register: update_branch
+    
+    - name: Show branch update result
+      debug:
+        msg: |
+          {{ '✅ Default branch updated to: ' + update_branch.repository.default_branch if update_branch.changed else 'ℹ️  Default branch already set' }}
+    
+    # Example 4: Disable a repository
+    - name: Disable old repository
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "old-project"
+        is_disabled: true
+        state: present
+      register: disable_repo
+      ignore_errors: true
+    
+    - name: Show disable result
+      debug:
+        msg: "{{ 'Repository disabled' if disable_repo.changed else 'Repository not found or already disabled' }}"
+      when: not disable_repo.failed
+    
+    # Example 5: Fork a repository
+    - name: Fork an existing repository
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "my-forked-repo"
+        parent_repository_id: "{{ new_repo.repository.id }}"
+        state: present
+      register: fork_repo
+      ignore_errors: true
+    
+    - name: Show fork result
+      debug:
+        msg: |
+          {% if not fork_repo.failed %}
+          ✅ Repository forked:
+          - Name: {{ fork_repo.repository.name }}
+          - Forked from: {{ fork_repo.repository.parent_repository_id | default('N/A') }}
+          {% else %}
+          ⚠️  Fork failed (may not be supported in this organization)
+          {% endif %}
+    
+    # Example 6: Create multiple repositories
+    - name: Create multiple repositories
+      basicPr0grammer.azure_devops.azure_devops_repository:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "{{ item }}"
+        state: present
+      loop:
+        - "frontend-app"
+        - "backend-api"
+        - "shared-library"
+      register: multi_repos
+    
+    - name: Show created repositories
+      debug:
+        msg: "Created: {{ item.repository.name }}"
+      loop: "{{ multi_repos.results }}"
+      when: item.changed
+    
+    # Example 7: Delete a repository (commented out for safety)
+    # - name: Delete old repository
+    #   basicPr0grammer.azure_devops.azure_devops_repository:
+    #     organization_url: "{{ organization_url }}"
+    #     project: "{{ project }}"
+    #     name: "old-unused-repo"
+    #     state: absent
+    
+    - name: Summary
+      debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════╗
+          ║     REPOSITORY MANAGEMENT EXAMPLE COMPLETED            ║
+          ╚════════════════════════════════════════════════════════╝
+          
+          ✅ Repositories created and configured
+          📝 Remember to push code to set default branches
+          
+          Next steps:
+          - Clone repositories using the provided URLs
+          - Push your first commit
+          - Update default branches as needed
+          
+          All operations completed! 🚀

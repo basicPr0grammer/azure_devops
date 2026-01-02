@@ -1,0 +1,124 @@
+---
+# Example: Complete environment setup with approvals and pipeline permissions
+- name: Azure DevOps Environment Management Example
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    organization_url: "https://dev.azure.com/YourOrg"
+    project: "YourProject"
+  
+  tasks:
+    # Example 1: Create a simple development environment
+    - name: Create development environment
+      basicPr0grammer.azure_devops.azure_devops_environment:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "development"
+        description: "Development environment for testing"
+        state: present
+      register: dev_env
+    
+    - name: Show development environment
+      debug:
+        msg: "✅ Development environment created with ID: {{ dev_env.environment.id }}"
+    
+    # Example 2: Create staging with approvers
+    - name: Create staging environment with approvers
+      basicPr0grammer.azure_devops.azure_devops_environment:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "staging"
+        description: "Staging environment - requires approval"
+        approvers:
+          - "user1@example.com"
+        min_approvers: 1
+        approval_instructions: "Please verify all tests pass before approving deployment"
+        approval_timeout: 1440  # 24 hours
+        state: present
+      register: staging_env
+    
+    - name: Show staging environment
+      debug:
+        msg: |
+          ✅ Staging environment created:
+          - ID: {{ staging_env.environment.id }}
+          - Approvers configured: {{ staging_env.approvers_configured | default(false) }}
+    
+    # Example 3: Create production with approvers and pipeline permissions
+    - name: Create production environment with full configuration
+      basicPr0grammer.azure_devops.azure_devops_environment:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "production"
+        description: "Production environment - strict approval required"
+        approvers:
+          - "user1@example.com"
+        min_approvers: 1
+        approval_instructions: "⚠️ PRODUCTION DEPLOYMENT - Ensure all checks pass!"
+        approval_timeout: 2880  # 48 hours
+        pipeline_permissions:
+          - "Ansible-Approval-Test"
+        state: present
+      register: prod_env
+    
+    - name: Show production environment
+      debug:
+        msg: |
+          ✅ Production environment created:
+          - ID: {{ prod_env.environment.id }}
+          - Approvers configured: {{ prod_env.approvers_configured | default(false) }}
+          - Pipelines granted access: {{ prod_env.pipeline_permissions_granted | default([]) | join(', ') }}
+    
+    # Example 4: Update an existing environment
+    - name: Update staging environment description
+      basicPr0grammer.azure_devops.azure_devops_environment:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "staging"
+        description: "Staging environment - Updated {{ ansible_date_time.iso8601 }}"
+        state: present
+      register: update_staging
+    
+    - name: Show update result
+      debug:
+        msg: "{{ 'Environment updated' if update_staging.changed else 'No changes needed' }}"
+    
+    # Example 5: Grant additional pipeline access
+    - name: Grant more pipelines access to production
+      basicPr0grammer.azure_devops.azure_devops_environment:
+        organization_url: "{{ organization_url }}"
+        project: "{{ project }}"
+        name: "production"
+        pipeline_permissions:
+          - "Ansible-Approval-Test"
+          - "CI/CD Pipeline"  # Add more pipelines as needed
+        state: present
+      register: grant_access
+    
+    - name: Show granted permissions
+      debug:
+        msg: "Permissions: {{ grant_access.pipeline_permissions_granted | default([]) | join(', ') }}"
+      when: grant_access.pipeline_permissions_granted is defined
+    
+    # Example 6: Remove an environment (commented out for safety)
+    # - name: Delete old test environment
+    #   basicPr0grammer.azure_devops.azure_devops_environment:
+    #     organization_url: "{{ organization_url }}"
+    #     project: "{{ project }}"
+    #     name: "old-test-env"
+    #     state: absent
+    
+    - name: Summary
+      debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════╗
+          ║     ENVIRONMENT MANAGEMENT EXAMPLE COMPLETED           ║
+          ╚════════════════════════════════════════════════════════╝
+          
+          ✅ Development environment: {{ dev_env.environment.id }}
+          ✅ Staging environment: {{ staging_env.environment.id }}
+          ✅ Production environment: {{ prod_env.environment.id }}
+          
+          All environments are configured and ready! 🚀
